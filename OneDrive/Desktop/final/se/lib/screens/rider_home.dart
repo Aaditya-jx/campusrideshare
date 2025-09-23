@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart' as http;
 import '../widgets/app_drawer.dart';
+import 'package:campus_ride_sharing_step1/screens/payment_page.dart';
+import 'package:geolocator/geolocator.dart';
 
 class RiderHome extends StatefulWidget {
   const RiderHome({super.key});
@@ -18,6 +20,12 @@ class _RiderHomeState extends State<RiderHome> {
 
   Set<Polyline> _polylines = {};
   List<LatLng> _routeCoords = [];
+
+  bool _sharingLocation = false;
+  bool _showSimulation = false;
+  List<LatLng> _simRoute = [];
+  String? _lastDriverId;
+  bool _showThankYou = false;
 
   void _onMapCreated(GoogleMapController controller) {
     mapController = controller;
@@ -77,6 +85,69 @@ class _RiderHomeState extends State<RiderHome> {
       points.add(LatLng(lat / 1E5, lng / 1E5));
     }
     return points;
+  }
+
+  Future<void> _requestLocationPermission() async {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Enable Location'),
+        content: const Text(
+            'To share your location with the driver, please enable location services.'),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              Navigator.of(context).pop();
+              // Request location permission using geolocator
+              await Geolocator.requestPermission();
+              // Optionally, check if location services are enabled
+              // bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+            },
+            child: const Text('Turn On'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void startRouteSimulation() {
+    setState(() {
+      _showSimulation = true;
+    });
+  }
+
+  void completeRouteSimulation() {
+    setState(() {
+      _showSimulation = false;
+      _showThankYou = true;
+    });
+    // Show thank you and feedback dialog
+    Future.delayed(const Duration(milliseconds: 500), () {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => ThankYouFeedbackDialog(driverId: _lastDriverId ?? "demo_driver"),
+      ).then((_) {
+        setState(() { _showThankYou = false; });
+      });
+    });
+  }
+
+  Future<List<LatLng>> _fetchRouteForSimulation(LatLng origin, LatLng destination) async {
+    const apiKey = "AIzaSyBZtnkBIygYn28_bCYKCHKIwquR3Xz6ZYI";
+    final url =
+        "https://maps.googleapis.com/maps/api/directions/json?origin=${origin.latitude},${origin.longitude}&destination=${destination.latitude},${destination.longitude}&key=$apiKey";
+    final response = await http.get(Uri.parse(url));
+    final data = json.decode(response.body);
+    if (data["routes"].isNotEmpty) {
+      final points = data["routes"][0]["overview_polyline"]["points"];
+      return _decodePolyline(points);
+    }
+    return [origin, destination];
   }
 
   @override
@@ -195,16 +266,15 @@ class _RiderHomeState extends State<RiderHome> {
                                             FieldValue.serverTimestamp(),
                                       });
 
-                                      // 2. Get route from pickup → drop
+                                      // 2. Get route from pickup → drop and simulate
                                       if (ride['fromLat'] != null &&
                                           ride['fromLng'] != null &&
                                           ride['toLat'] != null &&
                                           ride['toLng'] != null) {
-                                        final origin = LatLng(
-                                            ride['fromLat'], ride['fromLng']);
-                                        final destination =
-                                            LatLng(ride['toLat'], ride['toLng']);
-                                        _getRoute(origin, destination);
+                                        final origin = LatLng(ride['fromLat'], ride['fromLng']);
+                                        final destination = LatLng(ride['toLat'], ride['toLng']);
+                                        final route = await _fetchRouteForSimulation(origin, destination);
+                                        startRouteSimulation();
                                       }
                                     },
                                     style: ElevatedButton.styleFrom(
@@ -223,8 +293,152 @@ class _RiderHomeState extends State<RiderHome> {
               );
             },
           ),
+          // Toggle for sharing location with driver
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Share location with driver'),
+                Switch(
+                  value: _sharingLocation,
+                  onChanged: (val) {
+                    setState(() {
+                      _sharingLocation = val;
+                    });
+                    if (val) {
+                      _requestLocationPermission();
+                    }
+                  },
+                ),
+              ],
+            ),
+          ),
+          if (_showSimulation)
+            RouteSimulationOverlay(onComplete: completeRouteSimulation),
+          // Button to start route simulation (for demo/testing)
+          Positioned(
+            bottom: 30,
+            right: 20,
+            child: ElevatedButton(
+              onPressed: _showSimulation ? null : () {
+                // For demo, use _routeCoords
+                startRouteSimulation();
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo),
+              child: const Text('Start Simulated Ride'),
+            ),
+          ),
         ],
       ),
+    );
+  }
+}
+
+class RouteSimulationOverlay extends StatefulWidget {
+  final VoidCallback onComplete;
+  const RouteSimulationOverlay({required this.onComplete, super.key});
+
+  @override
+  State<RouteSimulationOverlay> createState() => _RouteSimulationOverlayState();
+}
+
+class _RouteSimulationOverlayState extends State<RouteSimulationOverlay> {
+  double progress = 0;
+  late final int duration;
+
+  @override
+  void initState() {
+    super.initState();
+    duration = 15; // 15 seconds
+    _startSimulation();
+  }
+
+  void _startSimulation() {
+    Future.doWhile(() async {
+      await Future.delayed(const Duration(milliseconds: 300));
+      setState(() {
+        progress += 1 / (duration * 3.3);
+      });
+      if (progress >= 1) {
+        widget.onComplete();
+        return false;
+      }
+      return true;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.black.withOpacity(0.8),
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text('Simulating your ride...', style: TextStyle(color: Colors.white, fontSize: 24)),
+            const SizedBox(height: 30),
+            LinearProgressIndicator(value: progress, minHeight: 10, backgroundColor: Colors.white24, color: Colors.green),
+            const SizedBox(height: 20),
+            Text('${(progress * duration).toInt()} / $duration sec', style: const TextStyle(color: Colors.white)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class ThankYouFeedbackDialog extends StatefulWidget {
+  final String driverId;
+  const ThankYouFeedbackDialog({required this.driverId, super.key});
+
+  @override
+  State<ThankYouFeedbackDialog> createState() => _ThankYouFeedbackDialogState();
+}
+
+class _ThankYouFeedbackDialogState extends State<ThankYouFeedbackDialog> {
+  double _rating = 3.0;
+  bool _submitted = false;
+
+  Future<void> _submitFeedback() async {
+    await FirebaseFirestore.instance
+        .collection("drivers")
+        .doc(widget.driverId)
+        .collection("ratings")
+        .add({"rating": _rating, "createdAt": FieldValue.serverTimestamp()});
+    setState(() { _submitted = true; });
+    await Future.delayed(const Duration(seconds: 2));
+    Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Thank you for traveling!'),
+      content: _submitted
+          ? const Text('Feedback submitted!')
+          : Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('Please rate your ride:'),
+                Slider(
+                  value: _rating,
+                  min: 1,
+                  max: 5,
+                  divisions: 4,
+                  label: _rating.toStringAsFixed(1),
+                  onChanged: (val) => setState(() => _rating = val),
+                ),
+              ],
+            ),
+      actions: _submitted
+          ? []
+          : [
+              TextButton(
+                onPressed: _submitFeedback,
+                child: const Text('Submit'),
+              ),
+            ],
     );
   }
 }

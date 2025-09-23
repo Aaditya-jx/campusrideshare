@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:location/location.dart';
+import 'package:geolocator/geolocator.dart';
 import '../services/auth_service.dart';
 import 'post_ride.dart';
 import 'my_rides.dart';
@@ -36,6 +37,31 @@ class _DriverHomeState extends State<DriverHome> {
     await FirebaseFirestore.instance.collection("drivers").doc(uid).update({
       "sharingLocation": false,
     });
+  }
+
+  Future<void> _requestLocationPermissionAndShare(String uid) async {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Enable Location'),
+        content: const Text('To share your location, please enable location services.'),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              Navigator.of(context).pop();
+              // Request location permission using geolocator
+              await Geolocator.requestPermission();
+              _startLocationSharing(uid);
+            },
+            child: const Text('Turn On'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -170,7 +196,7 @@ class _DriverHomeState extends State<DriverHome> {
               onChanged: (val) async {
                 setState(() => sharingLocation = val);
                 if (val) {
-                  _startLocationSharing(auth.user!.uid);
+                  await _requestLocationPermissionAndShare(auth.user!.uid);
                 } else {
                   _stopLocationSharing(auth.user!.uid);
                 }

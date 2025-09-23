@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class FeedbackPage extends StatefulWidget {
-  const FeedbackPage({super.key});
+  final String driverId;
+  const FeedbackPage({super.key, required this.driverId});
 
   @override
   State<FeedbackPage> createState() => _FeedbackPageState();
@@ -14,7 +15,7 @@ class _FeedbackPageState extends State<FeedbackPage> {
   void _submitFeedback() async {
     await FirebaseFirestore.instance
         .collection("drivers")
-        .doc("driverId123") // 🔥 Replace with actual driverId
+        .doc(widget.driverId)
         .collection("ratings")
         .add({"rating": _rating, "createdAt": FieldValue.serverTimestamp()});
 

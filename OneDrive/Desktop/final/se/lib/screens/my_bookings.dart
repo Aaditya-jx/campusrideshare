@@ -34,11 +34,12 @@ class _MyBookingsState extends State<MyBookings> {
       const SnackBar(content: Text("✅ Payment Successful! Booking Confirmed.")),
     );
 
-    // Navigate to feedback
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (_) => const FeedbackPage()),
-    );
+    // Mark the booking as paid/confirmed in Firestore
+    // Find the booking document and update its status
+    // This assumes you have the bookingId available
+    // You may need to refactor to pass bookingId to _startPayment and _handlePaymentSuccess
+    // For now, show a message to implement correct logic
+    // TODO: Implement booking status update here
   }
 
   void _handlePaymentError(PaymentFailureResponse response) {
