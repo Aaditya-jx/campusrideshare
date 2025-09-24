@@ -243,43 +243,64 @@ class _RiderHomeState extends State<RiderHome> {
                             itemBuilder: (c, i) {
                               final ride = docs[i].data();
                               final rideId = docs[i].id;
-
                               return Card(
-                                margin: const EdgeInsets.symmetric(
-                                    horizontal: 10, vertical: 5),
-                                child: ListTile(
-                                  leading: const Icon(Icons.directions_car,
-                                      color: Colors.indigo),
-                                  title:
-                                      Text("${ride['from']} → ${ride['to']}"),
-                                  subtitle: Text(
-                                      "Fare: ₹${ride['fare']} • Time: ${ride['time']}"),
-                                  trailing: ElevatedButton(
-                                    onPressed: () async {
-                                      // 1. Save booking
-                                      await FirebaseFirestore.instance
-                                          .collection("bookings")
-                                          .add({
-                                        "rideId": rideId,
-                                        "status": "booked",
-                                        "createdAt":
-                                            FieldValue.serverTimestamp(),
-                                      });
-
-                                      // 2. Get route from pickup → drop and simulate
-                                      if (ride['fromLat'] != null &&
-                                          ride['fromLng'] != null &&
-                                          ride['toLat'] != null &&
-                                          ride['toLng'] != null) {
-                                        final origin = LatLng(ride['fromLat'], ride['fromLng']);
-                                        final destination = LatLng(ride['toLat'], ride['toLng']);
-                                        final route = await _fetchRouteForSimulation(origin, destination);
-                                        startRouteSimulation();
-                                      }
-                                    },
-                                    style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.green),
-                                    child: const Text("Book"),
+                                margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(10.0),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          const Icon(Icons.directions_car, color: Colors.indigo),
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: Text(
+                                              // Show place/landmark names instead of coordinates
+                                              (ride['from'] ?? 'Unknown') + ' → ' + (ride['to'] ?? 'Unknown'),
+                                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                            ),
+                                          ),
+                                          ElevatedButton(
+                                            onPressed: () async {
+                                              // 1. Save booking
+                                              await FirebaseFirestore.instance
+                                                  .collection("bookings")
+                                                  .add({
+                                                "rideId": rideId,
+                                                "status": "booked",
+                                                "createdAt": FieldValue.serverTimestamp(),
+                                              });
+                                              // 2. Get route from pickup → drop and simulate
+                                              if (ride['fromLat'] != null && ride['fromLng'] != null && ride['toLat'] != null && ride['toLng'] != null) {
+                                                final origin = LatLng(ride['fromLat'], ride['fromLng']);
+                                                final destination = LatLng(ride['toLat'], ride['toLng']);
+                                                final route = await _fetchRouteForSimulation(origin, destination);
+                                                startRouteSimulation();
+                                              }
+                                            },
+                                            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                                            child: const Text("Book"),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Text("Fare: ₹${ride['fare']} | Date: ${ride['date']} | Time: ${ride['time']}", style: const TextStyle(fontSize: 14)),
+                                      if (ride['costPerKm'] != null) Text("Cost per km: ₹${ride['costPerKm']}", style: const TextStyle(fontSize: 13)),
+                                      if (ride['vehicleRegNo'] != null) Text("Vehicle Reg No: ${ride['vehicleRegNo']}", style: const TextStyle(fontSize: 13)),
+                                      if (ride['vehiclePhoto'] != null && ride['vehiclePhoto'].toString().isNotEmpty)
+                                        Padding(
+                                          padding: const EdgeInsets.symmetric(vertical: 4.0),
+                                          child: SizedBox(
+                                            height: 80,
+                                            child: Image.network(
+                                              ride['vehiclePhoto'],
+                                              fit: BoxFit.cover,
+                                              errorBuilder: (context, error, stackTrace) => const Text('Vehicle photo unavailable'),
+                                            ),
+                                          ),
+                                        ),
+                                    ],
                                   ),
                                 ),
                               );
